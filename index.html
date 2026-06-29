@@ -12,8 +12,12 @@
       button { padding: 0.5rem 1.25rem; font-size: 1rem; cursor: pointer; }
       #notes { margin-top: 2rem; }
       .note { border: 1px solid #ddd; border-radius: 4px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; }
+      .note-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
       .note h3 { margin: 0 0 0.25rem; }
       .note p { margin: 0; color: #555; }
+      .share-btn { flex-shrink: 0; padding: 0.25rem 0.75rem; font-size: 0.8rem; cursor: pointer; background: #fff; border: 1px solid #bbb; border-radius: 4px; color: #333; }
+      .share-btn:hover { background: #f0f0f0; }
+      .share-btn:disabled { opacity: 0.5; cursor: default; }
       #status { color: #888; font-size: 0.9rem; margin-top: 0.5rem; }
       #error { color: red; font-size: 0.85rem; margin-top: 1rem; white-space: pre-wrap; }
     </style>
@@ -67,10 +71,46 @@
 
         container.innerHTML = data.map(n => `
           <div class="note">
-            <h3>${escHtml(n.title)}</h3>
+            <div class="note-header">
+              <h3>${escHtml(n.title)}</h3>
+              <button class="share-btn" data-id="${escHtml(String(n.id))}" data-title="${escHtml(n.title)}" data-content="${escHtml(n.content || '')}">Share via email</button>
+            </div>
             <p>${escHtml(n.content || '')}</p>
           </div>
         `).join('');
+
+        container.querySelectorAll('.share-btn').forEach(btn => {
+          btn.addEventListener('click', () => shareNote(btn));
+        });
+      }
+
+      async function shareNote(btn) {
+        const recipient = prompt('Send this note to (email address):');
+        if (!recipient) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+
+        try {
+          const res = await fetch('/api/share', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipient,
+              noteTitle: btn.dataset.title,
+              noteContent: btn.dataset.content,
+              appUrl: window.location.origin,
+            }),
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error || 'Send failed');
+          btn.textContent = 'Sent ✓';
+          setTimeout(() => { btn.disabled = false; btn.textContent = 'Share via email'; }, 3000);
+        } catch (err) {
+          showError(err.message);
+          btn.disabled = false;
+          btn.textContent = 'Share via email';
+        }
       }
 
       document.getElementById('note-form').addEventListener('submit', async (e) => {
