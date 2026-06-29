@@ -15,6 +15,7 @@
       .note h3 { margin: 0 0 0.25rem; }
       .note p { margin: 0; color: #555; }
       #status { color: #888; font-size: 0.9rem; margin-top: 0.5rem; }
+      #error { color: red; font-size: 0.85rem; margin-top: 1rem; white-space: pre-wrap; }
     </style>
   </head>
   <body>
@@ -27,27 +28,41 @@
       <p id="status"></p>
     </form>
 
+    <div id="error"></div>
     <div id="notes"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script>
-      let supabase;
+    <script type="module">
+      import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+      function showError(msg) {
+        document.getElementById('error').textContent = 'Error: ' + msg;
+      }
+
+      function escHtml(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+
+      let client;
 
       async function init() {
-        const res = await fetch('/api/config');
-        const { supabaseUrl, supabaseKey } = await res.json();
-        supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-        await loadNotes();
+        try {
+          const res = await fetch('/api/config');
+          const { supabaseUrl, supabaseKey } = await res.json();
+          client = createClient(supabaseUrl, supabaseKey);
+          await loadNotes();
+        } catch (err) {
+          showError(err.message);
+        }
       }
 
       async function loadNotes() {
-        const { data, error } = await supabase
+        const container = document.getElementById('notes');
+        const { data, error } = await client
           .from('notes')
           .select('id, title, content, created_at')
           .order('created_at', { ascending: false });
 
-        const container = document.getElementById('notes');
-        if (error) { container.textContent = 'Error loading notes.'; return; }
+        if (error) { showError(error.message); return; }
         if (!data.length) { container.textContent = 'No notes yet.'; return; }
 
         container.innerHTML = data.map(n => `
@@ -65,18 +80,14 @@
         const status = document.getElementById('status');
 
         status.textContent = 'Posting…';
-        const { error } = await supabase.from('notes').insert({ title, content });
-        if (error) { status.textContent = 'Error: ' + error.message; return; }
+        const { error } = await client.from('notes').insert({ title, content });
+        if (error) { status.textContent = ''; showError(error.message); return; }
 
         document.getElementById('title').value = '';
         document.getElementById('content').value = '';
         status.textContent = 'Posted!';
         await loadNotes();
       });
-
-      function escHtml(str) {
-        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      }
 
       init();
     </script>
