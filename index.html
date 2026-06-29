@@ -3,9 +3,82 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hello Pioneer</title>
+    <title>Pioneer Notes</title>
+    <style>
+      body { font-family: sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+      h1 { margin-bottom: 1.5rem; }
+      input, textarea { width: 100%; box-sizing: border-box; padding: 0.5rem; margin-bottom: 0.5rem; font-size: 1rem; }
+      textarea { height: 100px; resize: vertical; }
+      button { padding: 0.5rem 1.25rem; font-size: 1rem; cursor: pointer; }
+      #notes { margin-top: 2rem; }
+      .note { border: 1px solid #ddd; border-radius: 4px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; }
+      .note h3 { margin: 0 0 0.25rem; }
+      .note p { margin: 0; color: #555; }
+      #status { color: #888; font-size: 0.9rem; margin-top: 0.5rem; }
+    </style>
   </head>
   <body>
-    <h1>hello from Pioneer Species!</h1>
+    <h1>hello from Pioneer Species</h1>
+
+    <form id="note-form">
+      <input id="title" type="text" placeholder="Title" required />
+      <textarea id="content" placeholder="Write a note…"></textarea>
+      <button type="submit">Post note</button>
+      <p id="status"></p>
+    </form>
+
+    <div id="notes"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      let supabase;
+
+      async function init() {
+        const res = await fetch('/api/config');
+        const { supabaseUrl, supabaseKey } = await res.json();
+        supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        await loadNotes();
+      }
+
+      async function loadNotes() {
+        const { data, error } = await supabase
+          .from('notes')
+          .select('id, title, content, created_at')
+          .order('created_at', { ascending: false });
+
+        const container = document.getElementById('notes');
+        if (error) { container.textContent = 'Error loading notes.'; return; }
+        if (!data.length) { container.textContent = 'No notes yet.'; return; }
+
+        container.innerHTML = data.map(n => `
+          <div class="note">
+            <h3>${escHtml(n.title)}</h3>
+            <p>${escHtml(n.content || '')}</p>
+          </div>
+        `).join('');
+      }
+
+      document.getElementById('note-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const title = document.getElementById('title').value.trim();
+        const content = document.getElementById('content').value.trim();
+        const status = document.getElementById('status');
+
+        status.textContent = 'Posting…';
+        const { error } = await supabase.from('notes').insert({ title, content });
+        if (error) { status.textContent = 'Error: ' + error.message; return; }
+
+        document.getElementById('title').value = '';
+        document.getElementById('content').value = '';
+        status.textContent = 'Posted!';
+        await loadNotes();
+      });
+
+      function escHtml(str) {
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+
+      init();
+    </script>
   </body>
 </html>
