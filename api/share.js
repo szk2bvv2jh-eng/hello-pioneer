@@ -3,7 +3,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { recipient, noteTitle, noteContent, appUrl } = req.body;
+  const { recipient, noteTitle, noteContent, noteId, appUrl } = req.body;
 
   if (!recipient || !noteTitle) {
     return res.status(400).json({ error: 'recipient and noteTitle are required' });
@@ -66,6 +66,7 @@ export default async function handler(req, res) {
         to: [recipient],
         subject: `Note shared with you: ${noteTitle}`,
         html,
+        ...(noteId ? { tags: [{ name: 'note_id', value: String(noteId) }] } : {}),
       }),
     });
 

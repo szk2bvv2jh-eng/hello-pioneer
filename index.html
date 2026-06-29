@@ -18,6 +18,13 @@
       .share-btn { flex-shrink: 0; padding: 0.25rem 0.75rem; font-size: 0.8rem; cursor: pointer; background: #fff; border: 1px solid #bbb; border-radius: 4px; color: #333; }
       .share-btn:hover { background: #f0f0f0; }
       .share-btn:disabled { opacity: 0.5; cursor: default; }
+      .activity { margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.35rem; min-height: 0; }
+      .ev { font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 12px; background: #f0f0f0; color: #555; }
+      .ev-delivered { background: #e8f5e9; color: #2e7d32; }
+      .ev-opened    { background: #e3f2fd; color: #1565c0; }
+      .ev-clicked   { background: #ede7f6; color: #4527a0; }
+      .ev-bounced   { background: #fce4ec; color: #c62828; }
+      .ev-complained{ background: #fff3e0; color: #e65100; }
       #status { color: #888; font-size: 0.9rem; margin-top: 0.5rem; }
       #error { color: red; font-size: 0.85rem; margin-top: 1rem; white-space: pre-wrap; }
     </style>
@@ -43,7 +50,7 @@
       }
 
       function escHtml(str) {
-        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
       }
 
       let client;
@@ -76,12 +83,44 @@
               <button class="share-btn" data-id="${escHtml(String(n.id))}" data-title="${escHtml(n.title)}" data-content="${escHtml(n.content || '')}">Share via email</button>
             </div>
             <p>${escHtml(n.content || '')}</p>
+            <div class="activity" id="activity-${escHtml(String(n.id))}"></div>
           </div>
         `).join('');
 
         container.querySelectorAll('.share-btn').forEach(btn => {
           btn.addEventListener('click', () => shareNote(btn));
         });
+
+        await loadActivity(data.map(n => n.id));
+      }
+
+      async function loadActivity(noteIds) {
+        if (!noteIds.length) return;
+        const { data, error } = await client
+          .from('email_events')
+          .select('note_id, recipient, event_type, created_at')
+          .in('note_id', noteIds)
+          .order('created_at', { ascending: false });
+
+        if (error || !data || !data.length) return;
+
+        // latest event per note → recipient
+        const latest = {};
+        for (const ev of data) {
+          if (!latest[ev.note_id]) latest[ev.note_id] = {};
+          if (!latest[ev.note_id][ev.recipient]) {
+            latest[ev.note_id][ev.recipient] = ev.event_type;
+          }
+        }
+
+        for (const [noteId, recipients] of Object.entries(latest)) {
+          const el = document.getElementById(`activity-${noteId}`);
+          if (!el) continue;
+          el.innerHTML = Object.entries(recipients)
+            .map(([email, status]) =>
+              `<span class="ev ev-${escHtml(status)}" title="${escHtml(email)}">${escHtml(email)} — ${escHtml(status)}</span>`)
+            .join('');
+        }
       }
 
       async function shareNote(btn) {
@@ -97,6 +136,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               recipient,
+              noteId:    btn.dataset.id,
               noteTitle: btn.dataset.title,
               noteContent: btn.dataset.content,
               appUrl: window.location.origin,
